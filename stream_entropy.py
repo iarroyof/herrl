@@ -1,23 +1,25 @@
 # This is an implementation of the streaming entropy computation method proposed in
 
-# Lall, A., Sekar, V., Ogihara, M., Xu, J., & Zhang, H. (2006, June). Data streaming algorithms for estimating entropy of network traffic. In ACM SIGMETRICS Performance Evaluation Review (Vol. 34, No. 1, pp. 145-156). ACM.
+# [1] Lall, A., Sekar, V., Ogihara, M., Xu, J., & Zhang, H. (2006, June). Data streaming algorithms for estimating entropy of network traffic. In ACM SIGMETRICS Performance Evaluation Review (Vol. 34, No. 1, pp. 145-156). ACM.
 
 # This is very seemed to that of:
 
-# Chakrabarti, A., Do Ba, K., & Muthukrishnan, S. (2006). Estimating entropy and entropy norm on data streams. Internet Mathematics, 3(1), 63-78.
-# Chakrabarti, A., Cormode, G., & McGregor, A. (2007, January). A near-optimal algorithm for computing the entropy of a stream. In Proceedings of the eighteenth annual ACM-SIAM symposium on Discrete algorithms (pp. 328-335). Society for Industrial and Applied Mathematics.
-# Bhuvanagiri, L., & Ganguly, S. (2006, September). Estimating entropy over data streams. In European Symposium on Algorithms (pp. 148-159). Springer, Berlin, Heidelberg.
-# Harvey, N. J., Nelson, J., & Onak, K. (2008, October). Sketching and streaming entropy via approximation theory. In Foundations of Computer Science, 2008. FOCS'08. IEEE 49th Annual IEEE Symposium on (pp. 489-498). IEEE.
-# Zhao, H. C., Lall, A., Ogihara, M., Spatscheck, O., Wang, J., & Xu, J. (2007, October). A data streaming algorithm for estimating entropies of OD flows. In Proceedings of the 7th ACM SIGCOMM conference on Internet measurement (pp. 279-290). ACM.
-# Bhuvanagiri, L., Ganguly, S., Kesh, D., & Saha, C. (2006, January). Simpler algorithm for estimating frequency moments of data streams. In Proceedings of the seventeenth annual ACM-SIAM symposium on Discrete algorithm (pp. 708-713). Society for Industrial and Applied Mathematics.
-# Ganguly, S., & Cormode, G. (2007). On estimating frequency moments of data streams. In Approximation, Randomization, and Combinatorial Optimization. Algorithms and Techniques (pp. 479-493). Springer, Berlin, Heidelberg.
-# Li, P. (2009, January). Compressed counting. In Proceedings of the twentieth annual ACM-SIAM symposium on Discrete algorithms (pp. 412-421). Society for Industrial and Applied Mathematics.
+# [2] Chakrabarti, A., Do Ba, K., & Muthukrishnan, S. (2006). Estimating entropy and entropy norm on data streams. Internet Mathematics, 3(1), 63-78.
+# [3] Chakrabarti, A., Cormode, G., & McGregor, A. (2007, January). A near-optimal algorithm for computing the entropy of a stream. In Proceedings of the eighteenth annual ACM-SIAM symposium on Discrete algorithms (pp. 328-335). Society for Industrial and Applied Mathematics.
+# [4] Bhuvanagiri, L., & Ganguly, S. (2006, September). Estimating entropy over data streams. In European Symposium on Algorithms (pp. 148-159). Springer, Berlin, Heidelberg.
+# [5] Harvey, N. J., Nelson, J., & Onak, K. (2008, October). Sketching and streaming entropy via approximation theory. In Foundations of Computer Science, 2008. FOCS'08. IEEE 49th Annual IEEE Symposium on (pp. 489-498). IEEE.
+# [6] Zhao, H. C., Lall, A., Ogihara, M., Spatscheck, O., Wang, J., & Xu, J. (2007, October). A data streaming algorithm for estimating entropies of OD flows. In Proceedings of the 7th ACM SIGCOMM conference on Internet measurement (pp. 279-290). ACM.
+# [7] Bhuvanagiri, L., Ganguly, S., Kesh, D., & Saha, C. (2006, January). Simpler algorithm for estimating frequency moments of data streams. In Proceedings of the seventeenth annual ACM-SIAM symposium on Discrete algorithm (pp. 708-713). Society for Industrial and Applied Mathematics.
+# [8] Ganguly, S., & Cormode, G. (2007). On estimating frequency moments of data streams. In Approximation, Randomization, and Combinatorial Optimization. Algorithms and Techniques (pp. 479-493). Springer, Berlin, Heidelberg.
+# [9] Li, P. (2009, January). Compressed counting. In Proceedings of the twentieth annual ACM-SIAM symposium on Discrete algorithms (pp. 412-421). Society for Industrial and Applied Mathematics.
+
+# Furthermore, the implementation for entropy was also modified to incorporate Mutual Information between each word and the stream it is sampled from.
 
 from sklearn.feature_extraction.text import CountVectorizer
 from collections import Counter
 from math import log
 import matplotlib.pyplot as plt
-from pdb import set_trace as st
+import argparse
 
 
 class windowStreamer(object):
@@ -54,42 +56,38 @@ class windowStreamer(object):
                 break
 
 
-vectorizer = CountVectorizer(analyzer='word')
+parser = argparse.ArgumentParser(description='Computation of entropy and mutual information of each item in a stream of words.')
+parser.add_argument('--wsize', type=int, default=10, help='An integer inidicating window size within the input stream. (default=10)')
+parser.add_argument('--ssize', type=int, default=20, help='An integer indicating the batch size yielded as input stream. (default=20)')
+parser.add_argument('--MI', action='store_true', help='Activates Mutual Information as information theoretic measure.')
+parser.add_argument('--input', required=True, help='The input file for streaming.')
 
-mi = False
+args = parser.parse_args()
 
-# For entropy computing
-window_size = 10  # The number of words yielded as a window
-sampling_stream_size = 20  # The number of windows yielded as stream
-input_file = "../mini_dbpedia.txt"
+mi = args.MI
 
-# For mutual information computing
-buffer_length = 10
+# Stream entropy computing parameters
+window_size = args.wsize  # The number of words yielded as a window
+sampling_stream_size = args.ssize  # The number of windows yielded as stream
+word_char = 'word'  # Only words supported for now..
+input_file = args.input  # "../mini_dbpedia.txt"
 
 # Window streamming from text document
+vectorizer = CountVectorizer(analyzer=word_char)
 stream = windowStreamer(input_file, vectorizer, window_size)
 
 if mi:
-    buffer = []
-    c = 0
-    for window in stream:
-        if c <= buffer_length:
-            buffer.append(window)
-            c += 1
-        else:
-            c = 0
-else:
     sampling_stream_buffer = []
     word_buffer = []
     c = 0
-    H_window = []
-    H_stream = []
-    H_symbol = []
+    H_window = []  # The entropy of each center word of a window computed w.r.t the the set of windows associated to all them.
+    H_stream = []  # 
+    H_symbol = []  # All the resulting H_window s concatenated
     sequence = []
-    #latest_buffer = []
+
     for word, window in stream:
-        if c <= sampling_stream_size:  # and latest_buffer == []:
-            sampling_stream_buffer.append(window)  #" ".join(window))
+        if c <= sampling_stream_size:
+            sampling_stream_buffer.append(window)
             word_buffer.append(word)
             c += 1
 
@@ -100,7 +98,7 @@ else:
                 try:
                     m_in_M = float(m[word])/float(M[word])
                     M_in_m = float(M[word])/float(m[word])
-                    H_window.append(m_in_M * log(M_in_m, 2))
+                    H_window.append(m_in_M * log(M_in_m, 2))  # Inverted ratio as in [2], Eq. 1.
                 except ZeroDivisionError:
                     H_window.append(0.0)
             # window entropies
@@ -112,6 +110,42 @@ else:
             sequence += word_buffer
             word_buffer = []
 
+else:
+    sampling_stream_buffer = []
+    word_buffer = []
+    c = 0
+    H_window = []  # The entropy of each center word of a window computed w.r.t the the set of windows associated to all them.
+    H_stream = []  # 
+    H_symbol = []  # All the resulting H_window s concatenated
+    sequence = []
+    #latest_buffer = []
+    for word, window in stream:
+        if c <= sampling_stream_size:  # and latest_buffer == []:
+            sampling_stream_buffer.append(window)  #" ".join(window))
+            word_buffer.append(word)
+            c += 1
+
+        else:
+            #M = Counter(sum(sampling_stream_buffer, []))
+            M = sampling_stream_size * window_size
+            m = Counter(word_buffer)
+            for word in word_buffer:  # Symbol entropies
+                try:
+                    #m_in_M = float(m[word])/float(M[word])
+                    m_in_M = float(m[word])/float(M)
+                    #M_in_m = float(M[word])/float(m[word])
+                    M_in_m = float(M)/float(m[word])
+                    H_window.append(m_in_M * log(M_in_m, 2))  # Inverted ratio as in [2], Eq. 1.
+                except ZeroDivisionError:
+                    H_window.append(0.0)
+            # window entropies
+            H_stream.append(sum(H_window))
+            H_symbol += H_window
+            H_window = []
+            sampling_stream_buffer = []
+            c = 0
+            sequence += word_buffer
+            word_buffer = []
 
 
 plt.plot(H_symbol)
