@@ -12,7 +12,7 @@ from pdb import set_trace as st
 def get_closest(k, seq):
     dif = {i: seq[i] - k for i in seq}
     j = min(dif, key=dif.get)
-    
+
     return j, abs(abs(k) - abs(seq[j]))
 
 
@@ -25,15 +25,19 @@ def reward(path, op="mean"):
     elif op == "median":
         return np.median([k for w, k in path])
     elif op == "var":
-        return np.var([k for w, k in path])    
+        return np.var([k for w, k in path])
 
 
 def penalty(x, m=1.0, b=0.0):
     return m * x + b
-        
-        
-def grad(z, mu, g=1.0):
-    return - (2 * g * (z - mu)) / math.log(2)
+
+
+def grad(x, mean, sigma):
+    # More info at: https://www.wolframalpha.com/input/?i=p(x)+%3D+(1%2F%E2%88%9A(2*%CF%80*s%5E2))*e%5E-((1%2F(2*s%5E2))+*(x-m)%5E2)
+    k = x -  mean
+    z = sigma ** 2
+    f = (1/(2*z)) * (k ** 2)
+    return - (k * np.exp(f)) / (math.sqrt(2 * math.pi) * (k ** (3/2)))
 
 
 
@@ -57,20 +61,21 @@ training_set = []
 test_set = []
 x = y = None
 
-# Randomly create a training set and a test set that does not include stop words (nouns only)
-for i in range(samples + tests):
-    while True:
-        x = random.choice(words)
-        if (x not in stop_words):
-            break
-    while True:
-        y = random.choice(words)
-        if (y not in stop_words and y != x):
-            break
-    if (i < samples):
-        training_set.append((x,y))
-    else:
-        test_set.append((x,y))
+ # Randomly create a training set and a test set that does not include stop words (nouns only)
+ for i in range(samples + tests):
+     while True:
+         x = random.choice(words)
+         # Since the strings are unicode, they need to be encoded so that we can compare them
+         x = x.encode('ascii','ignore')
+         if (x not in stop_words):
+             break
+     while True:
+         y = random.choice(words)
+         y = y.encode('ascii','ignore')
+         if (y not in stop_words and y != x):
+             break
+     if (i < samples):
+         training_set.append((x,y))
 
 # Probabilities of each word
 pw = {x : float(counter[x])/len(words) for x in counter}
@@ -148,7 +153,7 @@ while (R <= R_u):
                     break
                 # In case it was on the path it is deleted so that it isn't considered again
                 del line[closest_index]
-            
+
             # Append word_i to the path of words
             path_w.append(word_i)
 
