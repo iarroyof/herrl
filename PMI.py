@@ -4,42 +4,53 @@ import math
 import windows as w
 import numpy as np
 import random
+from nltk.tokenize import word_tokenize as tokenize
+import string
+from pdb import set_trace as st
+
 
 def get_closest(k, seq):
-    j = 0
-    min = None
-    for i in range(len(seq)):
-        if (seq[i] == 0):
-            continue
-        x = seq[i] - k
-        if (min == None or x < min):
-            min = x
-            j = i
-    return j
+    dif = {i: seq[i] - k for i in seq}
+    j = min(dif, key=dif.get)
+    
+    return j, abs(abs(k) - abs(seq[j]))
 
-def reward(path):
-    sum = 0
-    for w, k in path:
-        sum += k
-    return sum
 
-def grad(z, mu):
-    g = 1
+def reward(path, op="mean"):
+    if len(path) < 3: op = "mean"
+    if op == "sum":
+        return sum([k for w, k in path])
+    elif op == "mean":
+        return np.mean([k for w, k in path])
+    elif op == "median":
+        return np.median([k for w, k in path])
+    elif op == "var":
+        return np.var([k for w, k in path])    
+
+
+def penalty(x, m=1.0, b=0.0):
+    return m * x + b
+        
+        
+def grad(z, mu, g=1.0):
     return - (2 * g * (z - mu)) / math.log(2)
+
+
 
 categories = ['sci.space']
 newsgroups_train = fetch_20newsgroups(subset='train', categories = categories, remove=('headers', 'footers', 'quotes'))
 
-text = newsgroups_train.data[0]
+table = str.maketrans({key: None for key in string.punctuation})
+text = newsgroups_train.data[0].lower().translate(table)
 
 with open('utils/stop_words.txt') as f:
     stop_words = [word for line in f for word in line.split()]
 
-words = text.split()
+words = tokenize(text)
 counter = collections.Counter(words)
 
 # Number of samples of which the agent is going to train of
-samples = 4
+samples = 10
 # Number of tests to check the agent's performance
 tests = 4
 training_set = []
@@ -88,21 +99,27 @@ for i in range(len(words)):
         pmi = 0 if (p_ab == 0) else math.log(p_ab / (pa * pb))
         ady_matrix[i,j] = pmi
 
-max_iter = 10
+max_iter = 50
 z_k = 0
-alpha = 0.1
-scale = 1
-theta = ady_matrix.mean()
+alpha = 0.01
+scale = 0.5
+mean_mi = ady_matrix.mean()
+theta = mean_mi
+print("Initial model's theta: {}".format(theta))
 R = 0
-R_u = 30
+R_u = 1.5
+tilt = 1.0
+r_func = "var"
+
+#st()
 
 while (R <= R_u):
 
     # Training the agent
     for sample in training_set:
+        print("Current sample pair: {}".format(sample))
         iter = 0
-        source = sample[0]
-        target = sample[1]
+        source, target = sample
 
         # The word we're currently on
         word_i = source
@@ -113,37 +130,38 @@ while (R <= R_u):
         # This path only saves the words that are obtained while traveling
         path_w = []
 
-        while (iter < max_iter) and (target not in path_w):
+        while (iter < max_iter): # and (target not in path_w):
             z_k = np.random.normal(theta, scale) #mean, standart deviation
 
             # Save the index of the word we are currently on
             temp_index = words.index(word_i)
 
             line = list(ady_matrix[temp_index])
-
             # Removes all ceros from the line so that non-adyacent words are not added in the path
-            #line = [value for value in line if value != 0]
-
+            line = {i: x for i, x in enumerate(line) if x > 0.0}
+            #st()
             # Searchs for the word closest to the value of z_k, that is adyacent to word_i
             # and that is not already on the path
-            while True:
-                closest_index = get_closest(z_k, line)
+            while not len(line) == 1:
+                closest_index, delta = get_closest(z_k, line)
                 if (words[closest_index] not in path_w):
                     break
-
                 # In case it was on the path it is deleted so that it isn't considered again
                 del line[closest_index]
-
+            
             # Append word_i to the path of words
             path_w.append(word_i)
 
             # Append word_i and its pmi to the path
             path.append((word_i, ady_matrix[temp_index, closest_index]))
-
+            #st()
             #We update theta and the reward value
-            R = reward(path)
-            theta += alpha * R * grad(iw[word_i], theta)
-
+            R = reward(path, r_func) #- penalty(delta, tilt)
+            if R < -1000.0: continue
+            theta = theta + alpha * R * grad(iw[word_i], theta, scale)
+            print("New reward: {}".format(R))
+            print("New theta: {}".format(theta))
             # Replace the word we were currently on with the closest one that was found
             word_i = words[closest_index]
             iter += 1
+            print("Current path: {}".format(path))
