@@ -96,13 +96,10 @@ for i in range(len(words)):
     for j in range(len(words)):
         word_2 = words[j]
         pb = pw[word_2]
-        x = 0
         for window in windows:
             if word_1 in window and word_2 in window and window.index(word_1) != window.index(word_2):
-                x = x + 1
-        p_ab = float(x) / len(windows)
-        pmi = 0 if (p_ab == 0) else math.log(p_ab / (pa * pb))
-        ady_matrix[i,j] = pmi
+                ady_matrix[i,j] = 1
+                break
 
 max_iter = 50
 z_k = 0
